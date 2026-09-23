@@ -24,14 +24,14 @@ plausible sources, rather than guessing or silently picking one.
 **Overlap:** 60 characters (word-boundary-aligned), carried between chunks split from the same document
 
 campus_life is 88 short, single-topic posts averaging 317 characters — most
-of them (73 of 88) are already one complete thought and are under the
+of them (76 of 88) are already one complete thought and are under the
 800-character starter default anyway, which is why the starter's chunker
 never split anything on this corpus (88 documents in, 88 chunks out). That's
 not a bug, it's the right call for most of these posts: splitting a
 three-sentence dining hall review would only shred a sentence for no
 retrieval benefit.
 
-The 15 documents that do exceed 400 characters (mostly housing and course
+The 12 documents that do exceed 400 characters (mostly housing and course
 posts) have real internal structure worth cutting along: they're written in
 paragraphs organized by sub-topic — an intro, "the good," "the bad," and a
 practical facts paragraph (laundry cost, noise) for housing; format,
@@ -47,8 +47,8 @@ character slice — an earlier version of this cut mid-word, e.g.
 and fixed), and any trailing paragraph group under 178 characters — the
 length of the shortest whole document in this corpus — gets folded back into
 the previous chunk instead of shipped as a fragment. In practice this floor
-means only 2 of the 15 eligible documents (`housing_old_brewhouse.txt`,
-`housing_innisfree_hall.txt`) actually split into two chunks; the other 13
+means only 2 of the 12 eligible documents (`housing_old_brewhouse.txt`,
+`housing_innisfree_hall.txt`) actually split into two chunks; the other 10
 have a short trailing paragraph (often the one-sentence "advice" line) that
 can't stand alone, so the whole document stays a single chunk. I considered
 lowering the floor to force more documents to split, but tested it directly

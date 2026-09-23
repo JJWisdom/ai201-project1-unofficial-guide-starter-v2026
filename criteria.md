@@ -26,12 +26,16 @@ contains the answer.
 Questions 1-4 are specific and should retrieve cleanly, while question 5
 ("Is laundry free in the dorms?") is intentionally ambiguous — there are five
 housing halls, each with its own laundry doc and its own price, so there is
-no single best-match chunk. I confirmed this with `app.py retrieve`: the
-laundry question returns four plausible-but-different docs with close,
-non-dominant distances (0.43 / 0.44 / 0.47 / 0.48), unlike the other four
-questions which each have one clear best match well under 0.43. A target of
-5 of 5 would mean removing the hard case entirely; 3 of 5 would mean two
-clean questions failed, which is too weak a bar.
+no single document that's "the" answer. I confirmed this with `app.py
+retrieve` against my own chunker's index: the top 5 results are 0.330, 0.371,
+0.427, 0.442, 0.479, naming three different halls (Innisfree, Old Brewhouse,
+Aldridge) in the top 3 alone. The top match isn't a flat tie with the rest —
+but it's still only one specific hall's chunk, and "contains the answer" is
+genuinely ambiguous for a question with no single correct hall. That's a
+real, different kind of hard than the other four questions, which each have
+one obviously-correct source document. A target of 5 of 5 would mean
+removing the hard case entirely; 3 of 5 would mean two clean questions
+failed, which is too weak a bar.
 
 ---
 
@@ -61,11 +65,12 @@ in at least 4 of 5 tries.
      just keep five of them, or the "4 of 5" above has nothing to be 4 of. -->
 
 **Why this target:**
-I measured this before tuning anything, using `app.py retrieve` (no model
-calls). Best distances for my 5 in-scope questions run 0.175-0.427. Best
-distances for the 5 `OUT_OF_SCOPE` questions run 0.82-0.93. That's a clean
-gap of nearly 0.4 with no overlap, so any cutoff placed between roughly 0.5
-and 0.8 should catch all five out-of-scope questions. 4 of 5 is a
+I measured this using `app.py retrieve` (no model calls), against the index
+built by my own chunker. Best distances for my 5 in-scope questions run
+0.175-0.425. Best distances for the 5 `OUT_OF_SCOPE` questions run
+0.825-0.934. That's a clean gap of exactly 0.4 with no overlap, so any
+cutoff placed between roughly 0.5 and 0.8 should catch all five out-of-scope
+questions. 4 of 5 is a
 conservative floor given how wide that gap is, not a stretch target — if one
 fails in practice, that's a sign to inspect the cutoff or look for an
 embedding anomaly rather than a sign the target was wrong. 3 of 5 would be
@@ -93,7 +98,7 @@ corpus, so no fragment my chunker produces should read as less complete
 than the shortest real post already does. I picked 4 of 5 and not 5 of 5
 because chunking is heuristic — one paragraph or sentence boundary can
 reasonably fail — but 4 of 5 still proves the chunker is producing complete,
-non-fragment chunks rather than getting lucky once. 15 of my 88 documents
+non-fragment chunks rather than getting lucky once. 12 of my 88 documents
 are over 400 characters, so the split requirement has real room to be
 tested against.
 
