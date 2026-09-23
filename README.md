@@ -130,30 +130,49 @@ Laundry costs $1.50 wash, $1.50 dry, coin only, and the machines are old. On noi
 
 ## Sample Answer
 
-<!-- One complete question and answer, pasted as text, with the source line
-     visible. Milestone 4. -->
-
-**Question:**
+**Question:** When is the wait longest at Pellew Dining Hall?
 
 **Answer:**
 
 ```
+  (best distance 0.175, cutoff 0.6)
+
+The peak wait time at Pellew Dining Hall is early, specifically from 11:45 to 12:30.
+
+Source: dining_pellew_dining_hall.txt
+
+Sources retrieved: dining_halden_hall_followup.txt, dining_kestrel_commons_followup.txt, dining_pellew_dining_hall.txt, dining_pellew_dining_hall_followup.txt, dining_the_ridgeway_cafe_followup.txt
 ```
 
-**My relevance cutoff:**
+Worth noting: the retrieved context also contained wait-time and hours data
+for four *other* dining halls (Halden, Kestrel Commons, Ridgeway Café), since
+"wait" and "peak" language is similar across all the dining posts. The answer
+still stayed scoped to Pellew and cited the correct file — checked with
+`--show-prompt`, which is how I confirmed the grounding instruction
+(`generate.py:276`) holds up even when the context has several
+easily-confused near-duplicates in it, not just the right one.
 
-<!-- The number you set in config.py, and how you got there.
+**My relevance cutoff:** 0.6 (the starter default — kept, not changed)
 
-     You ran five questions your corpus covers and the five in OUT_OF_SCOPE
-     that it clearly doesn't, and wrote down the best distance for each. What
-     did those two groups look like? Where was the gap? Put the actual numbers
-     here — the table below wants all ten rows.
-
-     Milestone 4. -->
+I measured best-distance for all 5 of my in-scope questions and all 5
+`OUT_OF_SCOPE` questions using `app.py retrieve` (no model calls), against
+the index built with my own chunker. The two groups don't overlap at all:
+in-scope tops out at 0.425, out-of-scope bottoms out at 0.825 — a gap of
+exactly 0.4. 0.6 sits roughly in the middle of that gap, so I left it where
+the starter set it rather than moving it for the sake of moving it.
 
 | Question | In corpus? | Best distance |
 |---|---|---|
-|  |  |  |
+| What are the University Health Center's walk-in hours? | Yes | 0.316 |
+| When is the wait longest at Pellew Dining Hall? | Yes | 0.175 |
+| How many pages per semester can an undergraduate print? | Yes | 0.321 |
+| How often does the campus shuttle run on weekdays? | Yes | 0.425 |
+| Is laundry free in the dorms? | Yes | 0.330 |
+| What is the capital of Mongolia? | No | 0.825 |
+| How do I change the oil in a diesel engine? | No | 0.934 |
+| Who won the 1994 World Cup? | No | 0.886 |
+| What is the recommended dosage of ibuprofen for a headache? | No | 0.844 |
+| How do I write a for loop in Rust? | No | 0.896 |
 
 ## How I Used AI
 
