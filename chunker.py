@@ -22,6 +22,7 @@ to it, write down what you saw, and move on. That's a real observation about
 your pipeline, not giving up.
 """
 
+import re
 from dataclasses import dataclass
 
 import config
@@ -82,22 +83,84 @@ def fallback_split(
 
 def split_documents(documents: list[Document]) -> list[Chunk]:
     """
-    Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
+    Paragraph-aware chunker, built for campus_life's short single-topic posts.
 
-    Right now it just calls the fallback. That is the plain, generic behaviour
-    the brief is talking about.
+    Most documents here (73 of 88, averaging 317 characters) already read as
+    one complete thought, so they stay a single chunk untouched — splitting
+    them would only shred a sentence for no benefit. The 15 documents over
+    SPLIT_THRESHOLD characters are the ones actually worth cutting, and they
+    have real internal structure to cut along: paragraphs are already
+    organised by sub-topic ("the good" / "the bad" / a laundry-and-noise
+    paragraph; or format / workload / advice for course posts). Splitting on
+    those blank-line breaks keeps each chunk to one idea, instead of the
+    fallback's fixed-size window, which pays no attention to where a sentence
+    ends.
 
-    When you write your own strategy, set `produced_by` to
-    "chunker.py::split_documents" so your README's Sample Chunks section names
-    the right function. `app.py chunks` prints that string for you.
-
-    Things worth thinking about before you write any code:
-      - Are your documents short posts or long guides?
-      - Is the useful information in one sentence, or spread over a paragraph?
-      - Would splitting on paragraph breaks keep more thoughts intact than
-        splitting on a character count?
+    Paragraphs are grouped up to CHUNK_SIZE characters per chunk. Adjacent
+    chunks share CHUNK_OVERLAP characters of trailing context, so a fact
+    stated right at a paragraph boundary isn't lost to whichever chunk didn't
+    get it. Any trailing group that would end up under MIN_CHUNK_SIZE
+    characters — a short "advice" paragraph left dangling on its own, for
+    example — gets folded back into the previous chunk rather than shipped
+    as a fragment nobody could answer a question from alone.
     """
-    return fallback_split(documents)
+    chunk_size = config.CHUNK_SIZE
+    overlap = config.CHUNK_OVERLAP
+    min_chunk = config.MIN_CHUNK_SIZE
+    split_threshold = config.SPLIT_THRESHOLD
+
+    chunks: list[Chunk] = []
+    for doc in documents:
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", doc.text) if p.strip()]
+
+        if len(doc.text) <= split_threshold or len(paragraphs) <= 1:
+            chunks.append(
+                Chunk(
+                    text=doc.text,
+                    source=doc.source,
+                    index=0,
+                    produced_by="chunker.py::split_documents",
+                )
+            )
+            continue
+
+        groups: list[str] = []
+        current = ""
+        for para in paragraphs:
+            candidate = f"{current}\n\n{para}" if current else para
+            if len(candidate) > chunk_size and current:
+                groups.append(current)
+                current = para
+            else:
+                current = candidate
+        if current:
+            groups.append(current)
+
+        # A short trailing group (e.g. a one-sentence "advice" paragraph left
+        # on its own) reads as a fragment rather than a complete thought.
+        # Fold it into its neighbour instead of shipping it as-is.
+        if len(groups) > 1 and len(groups[-1]) < min_chunk:
+            groups[-2] = f"{groups[-2]}\n\n{groups[-1]}"
+            groups.pop()
+
+        for i, group in enumerate(groups):
+            if i > 0:
+                tail = groups[i - 1][-overlap:]
+                # The slice above almost always lands mid-word. Drop the
+                # partial leading word so overlap starts clean.
+                if " " in tail:
+                    tail = tail.split(" ", 1)[1]
+                group = f"{tail.strip()}\n\n{group}"
+            chunks.append(
+                Chunk(
+                    text=group.strip(),
+                    source=doc.source,
+                    index=i,
+                    produced_by="chunker.py::split_documents",
+                )
+            )
+
+    return chunks
 
 
 def describe(chunks: list[Chunk]) -> str:

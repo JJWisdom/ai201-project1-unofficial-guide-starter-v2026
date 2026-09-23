@@ -1,6 +1,6 @@
 # The Unofficial Guide
 
-<!-- Replace this line with your name and which corpus you picked. -->
+Jeremiah Wisdom — corpus: `campus_life`
 
 > **This file is your submission.** Fill it in as you go — most sections get
 > written during the milestone that produces them, not at the end.
@@ -29,53 +29,103 @@
 
 ## Chunking Strategy
 
-**Chunk size:**
-**Overlap:**
+**Chunk size:** 350 characters target, only applied to documents over a 400-character split threshold
+**Overlap:** 60 characters (word-boundary-aligned), carried between chunks split from the same document
 
-<!-- What about YOUR documents made you pick these numbers? Short posts and
-     long sectioned guides don't want the same chunking, and "800 seemed
-     reasonable" earns nothing. Point at something you noticed when you read
-     the documents in Milestone 1.
+campus_life is 88 short, single-topic posts averaging 317 characters — most
+of them (73 of 88) are already one complete thought and are under the
+800-character starter default anyway, which is why the starter's chunker
+never split anything on this corpus (88 documents in, 88 chunks out). That's
+not a bug, it's the right call for most of these posts: splitting a
+three-sentence dining hall review would only shred a sentence for no
+retrieval benefit.
 
-     If you changed your mind partway through, say so and say why. That's worth
-     more than pretending you got it right first time.
+The 15 documents that do exceed 400 characters (mostly housing and course
+posts) have real internal structure worth cutting along: they're written in
+paragraphs organized by sub-topic — an intro, "the good," "the bad," and a
+practical facts paragraph (laundry cost, noise) for housing; format,
+workload, and one piece of advice for courses. A fixed 800-character window
+ignores those breaks entirely. My chunker splits on blank-line paragraph
+breaks instead, grouping paragraphs up to 350 characters per chunk, so each
+chunk stays one idea instead of a mid-sentence cut.
 
-     Milestone 3. -->
+Two rules keep this from producing garbage: adjacent chunks share 60
+characters of trailing context (trimmed to a clean word boundary, not a raw
+character slice — an earlier version of this cut mid-word, e.g.
+`"ween-two-rooms arrangement..."`, which I caught by reading actual output
+and fixed), and any trailing paragraph group under 178 characters — the
+length of the shortest whole document in this corpus — gets folded back into
+the previous chunk instead of shipped as a fragment. In practice this floor
+means only 2 of the 15 eligible documents (`housing_old_brewhouse.txt`,
+`housing_innisfree_hall.txt`) actually split into two chunks; the other 13
+have a short trailing paragraph (often the one-sentence "advice" line) that
+can't stand alone, so the whole document stays a single chunk. I considered
+lowering the floor to force more documents to split, but tested it directly
+(`chunker.py` at chunk_size=250–300) and found it reintroduces the exact
+problem the floor exists to prevent — a 10-character chunk containing only a
+document's title, with nothing else in it. I kept the floor and accepted
+that most long documents in this corpus don't have a clean second half to
+split off, rather than force a split that produces a worse chunk than no
+split at all.
+
+Result after indexing: 90 chunks from 88 documents, 311 characters average,
+shortest 178 (a whole short document, at the floor, not a fragment), longest
+461.
 
 ## Sample Chunks
 
-<!-- Five chunks, pasted as text. Label each one and name the file it came from
-     AND the function that produced it — the grader checks your code against
-     what you claim here.
+The first three are whole-document chunks (documents under the 400-character
+split threshold, left untouched). The last two are both halves of
+`housing_old_brewhouse.txt`, chosen deliberately to show what the paragraph
+splitter actually does to a document over the threshold — including the
+word-boundary-trimmed overlap at the start of chunk 2.
 
-     `python app.py chunks -n 5` prints all three for you. Copy them straight
-     across.
-
-     Milestone 3. -->
-
-**Chunk 1** — source: `` — produced by: ``
+**Chunk 1** — source: `admin_add_drop_deadline.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+On the add/drop deadline
+
+You can add a course through the end of the second week. Dropping is a longer window — through the end of week six — but a drop after week two shows as a W on your transcript. Nothing anywhere on the registrar's site says this plainly, and students find out from each other.
 ```
 
-**Chunk 2** — source: `` — produced by: ``
+**Chunk 2** — source: `course_math_220_exams.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+MATH 220 Linear Algebra — assessment
+
+Two midterms and a cumulative final. Curved to a b- median.
+
+The problem sets are the course; the lectures make sense afterwards rather than during.
 ```
 
-**Chunk 3** — source: `` — produced by: ``
+**Chunk 3** — source: `dining_the_ridgeway_cafe.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+The Ridgeway Café
+
+Second-year here. Wait times: 10 to 15 minutes at 12:30, none after 2:00. The thing worth going for is the only place on campus with real espresso. The thing to know is that seating is tight; about 40 seats for a building of 900.
+
+Hours are 7:00am to 4:00pm weekdays only. Costs declining balance only, no meal swipes.
 ```
 
-**Chunk 4** — source: `` — produced by: ``
+**Chunk 4** — source: `housing_old_brewhouse.txt#0` — produced by: `chunker.py::split_documents`
 
 ```
+Old Brewhouse — what it's actually like
+
+Took this last spring. Built 1902 as a brewery, converted to housing in 1998. Rooms are doubles and triples with unusual floor plans, no two alike.
+
+The good: the most characterful building on campus and people get attached to it.
 ```
 
-**Chunk 5** — source: `` — produced by: ``
+**Chunk 5** — source: `housing_old_brewhouse.txt#1` — produced by: `chunker.py::split_documents`
 
 ```
+building on campus and people get attached to it.
+
+The bad: the heating is uneven — some rooms run hot all winter and can't be adjusted.
+
+Laundry costs $1.50 wash, $1.50 dry, coin only, and the machines are old. On noise: sound carries strangely because of the original brick; a room two floors up can be louder than next door.
 ```
 
 ## Sample Answer
