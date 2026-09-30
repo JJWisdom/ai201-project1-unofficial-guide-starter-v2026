@@ -333,6 +333,83 @@ Based on the documents, laundry is not free.
 
      Milestone 3. -->
 
+**I missed nothing, and at least three of my five targets were set low.**
+Clearing all five on the first try says more about the targets than about
+the system:
+
+- **Criterion 3 was the safest.** I wrote in `criteria.md` that 4 of 5 was
+  "a conservative floor" given a 0.4 distance gap. My five out-of-scope
+  questions (Mongolia, diesel engines, Rust) are so far from a campus corpus
+  that no reasonable cutoff could fail them. **Tighten to:** 5 of 5, on five
+  questions that sound like they belong but aren't covered. For example:
+  "What's the tuition at State?", "When does the city library close?", "Is
+  there a dress code for the career fair?" Those would test whether 0.6 is
+  in the right place, not just whether it's below 0.8.
+- **Criterion 1 was loose because it counts any of the top 5.** I checked a
+  stricter version against the same run: "the *top* chunk contains the
+  answer" scores **3 of 5**, which misses. On the Pellew question the top
+  chunk is `dining_pellew_dining_hall_followup.txt#0` (distance 0.175). It
+  says "go before 11:45" but never gives the 12:30 end. On the laundry
+  question the top chunk covers one hall. **Tighten to:** at least 4 of 5
+  with the answer in the top 1, or 5 of 5 in the top 3.
+- **Criterion 5 measured the letter of what I wanted, not the point.** I
+  wanted "don't present part of the answer as the whole answer." I wrote
+  "list at least two halls," and the system passed by listing three of
+  seven while claiming "laundry is not free" for all of them. **Tighten
+  to:** the answer either covers every hall or says it only covers some.
+
+**What the runs did show: two weak spots, one mechanism.** No criterion
+missed, but two results came in at the edge of a target, and both come
+from the same place. Splitting two housing reviews
+(`housing_innisfree_hall.txt`, `housing_old_brewhouse.txt`) produced a
+second-half chunk that, in both cases, holds the review's laundry-and-noise
+paragraph.
+
+1. **Chunking caused the near-miss on criterion 4.** The overlap carried
+   into chunk #1 is trimmed to a *word* boundary (the unit 1 fix), but not
+   to a *sentence* boundary. So `housing_innisfree_hall.txt#1` opens with
+   "arrangement is the best compromise on campus.", the tail of a sentence
+   whose start is in chunk #0. The overlap copies the last 60 characters
+   and drops the leading partial word. 60 characters almost never lines up
+   with the start of a sentence, so every split-produced chunk after the
+   first opens mid-sentence. Run 3's sample happened to include one.
+2. **Retrieval caused the laundry gap on criterion 5, and generation
+   stretched it.** Those second-half chunks are just the laundry-and-noise
+   paragraphs, so they repeat the dedicated `housing_*_laundry.txt`
+   documents. For "Is laundry free in the dorms?" they rank #1 and #2
+   (0.330, 0.371), and the matching laundry documents rank #3 and #4. With
+   top-k = 5, those near-duplicates fill four of the five slots, covering
+   just two halls. Aldridge takes the fifth. The other four halls' laundry
+   documents are close behind at ranks 7–10 (0.517–0.550, all well inside
+   the 0.6 cutoff) and never reach the model:
+
+   ```
+   0.330 housing_innisfree_hall.txt#1         ← retrieved (top 5)
+   0.371 housing_old_brewhouse.txt#1          ← retrieved
+   0.427 housing_innisfree_hall_laundry.txt#0 ← retrieved, same hall again
+   0.442 housing_old_brewhouse_laundry.txt#0  ← retrieved, same hall again
+   0.479 housing_aldridge_hall_laundry.txt#0  ← retrieved
+   0.512 housing_aldridge_hall.txt#0
+   0.517 housing_fenwick_court_laundry.txt#0  ← never seen
+   0.521 housing_morrow_house_laundry.txt#0   ← never seen (the cheapest hall)
+   0.544 housing_calder_annexe_laundry.txt#0  ← never seen
+   0.550 housing_tamsin_court_laundry.txt#0   ← never seen (in-unit washer-dryer)
+   ```
+
+   The model then generalises from what it was given: "laundry is not
+   free", about all the dorms. The four halls it never saw include Tamsin
+   Court, whose laundry is an in-unit washer-dryer with no per-load price,
+   the one hall where the blanket claim is unsupported. The model did what
+   its prompt asked (answer from the documents given). The documents it was
+   given were three halls' worth of a seven-hall answer.
+
+The pattern: in a corpus where each hall has both a review and a dedicated
+laundry post, retrieval by closest meaning fills the top 5 with
+near-duplicates. Any question whose correct answer is spread across many
+documents gets a partial answer that reads as complete. Laundry is the only
+test question of that kind. The noise and dining questions have the same
+shape, since there are seven noise posts and several dining posts.
+
 ## The Improvement
 
 **What I changed:**
