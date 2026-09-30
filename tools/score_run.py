@@ -57,7 +57,7 @@ def parse(path: Path):
 
     runs = {}
     for m in re.finditer(
-        r"^### (.+?) — run (\d+)\n\n- Best distance: .*\n- Sources retrieved: .*\n\n```\n(.*?)\n```",
+        r"^### ([^\n]+?) — run (\d+)\n\n- Best distance: [^\n]*\n- Sources retrieved: [^\n]*\n\n```\n(.*?)\n```",
         text, re.M | re.S,
     ):
         runs.setdefault(int(m.group(2)), {})[m.group(1)] = m.group(3)
@@ -188,6 +188,7 @@ def main(path: Path):
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
     if len(sys.argv) != 2:
         sys.exit("usage: python tools/score_run.py results/<file>.md")
     main(Path(sys.argv[1]))
