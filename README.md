@@ -44,23 +44,32 @@ Two rules keep this from producing garbage: adjacent chunks share 60
 characters of trailing context (trimmed to a clean word boundary, not a raw
 character slice — an earlier version of this cut mid-word, e.g.
 `"ween-two-rooms arrangement..."`, which I caught by reading actual output
-and fixed), and any trailing paragraph group under 178 characters — the
-length of the shortest whole document in this corpus — gets folded back into
-the previous chunk instead of shipped as a fragment. In practice this floor
-means only 2 of the 12 eligible documents (`housing_old_brewhouse.txt`,
-`housing_innisfree_hall.txt`) actually split into two chunks; the other 10
-have a short trailing paragraph (often the one-sentence "advice" line) that
-can't stand alone, so the whole document stays a single chunk. I considered
-lowering the floor to force more documents to split, but tested it directly
-(`chunker.py` at chunk_size=250–300) and found it reintroduces the exact
-problem the floor exists to prevent — a 10-character chunk containing only a
-document's title, with nothing else in it. I kept the floor and accepted
-that most long documents in this corpus don't have a clean second half to
-split off, rather than force a split that produces a worse chunk than no
-split at all.
+and fixed), and any paragraph group under a minimum size gets merged into a
+neighbour instead of shipped as a fragment. The floor is derived, not
+hard-coded: the length of the shortest whole document in the corpus (178
+here), capped at half the chunk size (so 175 at 350). If the corpus treats
+that much text as a complete post, no piece cut from a longer one should be
+shorter. In practice this floor means only 2 of the 12 eligible documents
+(`housing_old_brewhouse.txt`, `housing_innisfree_hall.txt`) actually split
+into two chunks; the other 10 have a short trailing paragraph (often the
+one-sentence "advice" line) that can't stand alone, so the whole document
+stays a single chunk.
+
+The first version of the floor only checked the *last* group. Testing at
+chunk_size=250–300 showed that a short first group — a 10-character chunk
+containing only a document's title — slipped through, and so did the
+occasional short middle group. I originally worked around that by leaving
+the chunk size at 350, where it happened not to trigger; it's now fixed in
+the code, since every group is checked (a short first group merges forward,
+any other merges back). `python tools/check_chunks.py` asserts the
+invariants this section claims — no split-produced chunk under the floor,
+every chunk carries a source, overlap starts on a word boundary, at least
+two campus_life documents split — across chunk sizes 150–500 and all four
+shipped corpora, and prints the document counts quoted above straight from
+the data.
 
 Result after indexing: 90 chunks from 88 documents, 311 characters average,
-shortest 178 (a whole short document, at the floor, not a fragment), longest
+shortest 178 (a whole short document, not a fragment), longest
 461.
 
 ## Sample Chunks
@@ -167,7 +176,7 @@ the starter set it rather than moving it for the sake of moving it.
 
 ## How I Used AI
 
-**1.** I asked Claude to write a paragraph-aware chunker for `chunker.py::split_documents`, based on what I'd read in Milestone 1: most campus_life posts are short and already one complete thought, but the longer housing/course posts have real paragraph structure ("the good" / "the bad" / a practical-facts paragraph) worth splitting on instead of the fixed 800-character window. The first version worked at the default settings, but when I asked it to test smaller chunk-size values to see if more documents would split, it surfaced its own bug: at chunk_size=250-300, some documents produced a 10-character chunk containing nothing but a document's title, because the floor rule only protected the *last* paragraph group, not an isolated first one. It also caught a second bug on inspection of real output — the overlap between split chunks was slicing at a fixed character count with no regard for word boundaries, producing chunks that started mid-word (`"ween-two-rooms arrangement..."` instead of `"between-two-rooms"`). I had it fix the overlap to trim to the nearest word boundary and kept the chunk-size at 350, where the floor rule doesn't hit the title-fragment bug on this corpus.
+**1.** I asked Claude to write a paragraph-aware chunker for `chunker.py::split_documents`, based on what I'd read in Milestone 1: most campus_life posts are short and already one complete thought, but the longer housing/course posts have real paragraph structure ("the good" / "the bad" / a practical-facts paragraph) worth splitting on instead of the fixed 800-character window. The first version worked at the default settings, but when I asked it to test smaller chunk-size values to see if more documents would split, it surfaced its own bug: at chunk_size=250-300, some documents produced a 10-character chunk containing nothing but a document's title, because the floor rule only protected the *last* paragraph group, not an isolated first one. It also caught a second bug on inspection of real output — the overlap between split chunks was slicing at a fixed character count with no regard for word boundaries, producing chunks that started mid-word (`"ween-two-rooms arrangement..."` instead of `"between-two-rooms"`). I had it fix the overlap to trim to the nearest word boundary and initially kept the chunk-size at 350, where the floor rule doesn't hit the title-fragment bug on this corpus. After review feedback pointed out that this was a config workaround for a code bug, I had it fix the floor to check every group, derive the floor from the corpus instead of hard-coding 178, and add `tools/check_chunks.py` so the invariants are asserted at every chunk size rather than remembered.
 
 **2.** Before finalizing my five test questions, I asked Claude to pressure-test them by actually running each one through the live pipeline rather than reasoning about them abstractly. Two of my five had a real problem it caught this way: my health center question asked for "weekday hours" expecting an opening-closing range, but the source document only ever states walk-in hours (8am-11am) — there's no closing time anywhere in it, so no correct answer could ever have matched what I'd written for `expects`. Similarly, my Pellew dining hall question asked for "hours," which the live system correctly answered with the operating hours (7am-8pm) — not the peak wait-time window (11:45-12:30) I actually meant for `expects` to check. I reworded both questions to ask for the specific fact I actually wanted, then reran them live to confirm the new wording retrieved cleanly and the answer matched the updated `expects` phrase before writing anything into `questions.py`.
 

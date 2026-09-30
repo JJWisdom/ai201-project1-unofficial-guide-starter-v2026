@@ -32,7 +32,11 @@ CORPUS = os.getenv("AI201_CORPUS", "campus_life")
 CHUNK_SIZE = 350        # target characters per chunk, once a doc is split
 CHUNK_OVERLAP = 60      # characters of trailing context shared between chunks
 SPLIT_THRESHOLD = 400   # documents at or under this length stay one chunk
-MIN_CHUNK_SIZE = 178    # floor: shortest whole document in campus_life
+# Floor for a split-produced chunk. None derives it from the corpus being
+# chunked — its shortest whole document, capped at half of CHUNK_SIZE — so
+# switching corpora doesn't leave a stale number behind. Set an int to
+# override. See chunker.py::min_chunk_size.
+MIN_CHUNK_SIZE = None
 
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────

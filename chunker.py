@@ -81,14 +81,21 @@ def fallback_split(
     return chunks
 
 
-def split_documents(documents: list[Document]) -> list[Chunk]:
+def split_documents(
+    documents: list[Document],
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+    min_chunk: int | None = None,
+) -> list[Chunk]:
     """
     Paragraph-aware chunker, built for campus_life's short single-topic posts.
 
-    Most documents here (73 of 88, averaging 317 characters) already read as
-    one complete thought, so they stay a single chunk untouched — splitting
-    them would only shred a sentence for no benefit. The 15 documents over
-    SPLIT_THRESHOLD characters are the ones actually worth cutting, and they
+    Most documents here are short and already read as one complete thought,
+    so any document at or under SPLIT_THRESHOLD stays a single chunk
+    untouched — splitting it would only shred a sentence for no benefit.
+    (For the actual counts, run `python tools/check_chunks.py`; they're
+    printed from the data rather than written here, where they'd go stale.)
+    The documents over the threshold are the ones worth cutting, and they
     have real internal structure to cut along: paragraphs are already
     organised by sub-topic ("the good" / "the bad" / a laundry-and-noise
     paragraph; or format / workload / advice for course posts). Splitting on
@@ -99,14 +106,18 @@ def split_documents(documents: list[Document]) -> list[Chunk]:
     Paragraphs are grouped up to CHUNK_SIZE characters per chunk. Adjacent
     chunks share CHUNK_OVERLAP characters of trailing context, so a fact
     stated right at a paragraph boundary isn't lost to whichever chunk didn't
-    get it. Any trailing group that would end up under MIN_CHUNK_SIZE
-    characters — a short "advice" paragraph left dangling on its own, for
-    example — gets folded back into the previous chunk rather than shipped
-    as a fragment nobody could answer a question from alone.
+    get it. Any group under the minimum chunk size — a bare title at the
+    start, a one-sentence "advice" paragraph at the end, or a short paragraph
+    stranded in between — gets merged into a neighbour rather than shipped as
+    a fragment nobody could answer a question from alone.
+
+    The minimum is derived from the documents passed in (see
+    `min_chunk_size`), so the floor tracks the corpus instead of being a
+    hand-copied number.
     """
-    chunk_size = config.CHUNK_SIZE
-    overlap = config.CHUNK_OVERLAP
-    min_chunk = config.MIN_CHUNK_SIZE
+    chunk_size = chunk_size or config.CHUNK_SIZE
+    overlap = overlap or config.CHUNK_OVERLAP
+    min_chunk = min_chunk or min_chunk_size(documents, chunk_size)
     split_threshold = config.SPLIT_THRESHOLD
 
     chunks: list[Chunk] = []
@@ -136,12 +147,20 @@ def split_documents(documents: list[Document]) -> list[Chunk]:
         if current:
             groups.append(current)
 
-        # A short trailing group (e.g. a one-sentence "advice" paragraph left
-        # on its own) reads as a fragment rather than a complete thought.
-        # Fold it into its neighbour instead of shipping it as-is.
-        if len(groups) > 1 and len(groups[-1]) < min_chunk:
-            groups[-2] = f"{groups[-2]}\n\n{groups[-1]}"
-            groups.pop()
+        # A short group reads as a fragment rather than a complete thought,
+        # wherever it sits. Checking only the last group let a bare title
+        # through as chunk 0 whenever CHUNK_SIZE was small enough to cut
+        # right after it, so check every group: a short first group merges
+        # forward, any other merges back.
+        i = 0
+        while len(groups) > 1 and i < len(groups):
+            if len(groups[i]) >= min_chunk:
+                i += 1
+            elif i == 0:
+                groups[0:2] = [f"{groups[0]}\n\n{groups[1]}"]
+            else:
+                groups[i - 1 : i + 1] = [f"{groups[i - 1]}\n\n{groups[i]}"]
+                i -= 1
 
         for i, group in enumerate(groups):
             if i > 0:
@@ -161,6 +180,24 @@ def split_documents(documents: list[Document]) -> list[Chunk]:
             )
 
     return chunks
+
+
+def min_chunk_size(documents: list[Document], chunk_size: int | None = None) -> int:
+    """
+    The floor for a split-produced chunk.
+
+    config.MIN_CHUNK_SIZE wins if set. Otherwise it's the length of the
+    shortest whole document — if the corpus itself treats that much text as a
+    complete post, no piece cut from a longer post should be shorter — capped
+    at half of chunk_size. Without the cap, a corpus of long documents
+    (city_guides' shortest is over 1400 characters) gets a floor no group can
+    reach, and nothing splits at all.
+    """
+    if config.MIN_CHUNK_SIZE:
+        return config.MIN_CHUNK_SIZE
+    chunk_size = chunk_size or config.CHUNK_SIZE
+    shortest = min((len(d.text) for d in documents), default=0)
+    return min(shortest, chunk_size // 2)
 
 
 def describe(chunks: list[Chunk]) -> str:
