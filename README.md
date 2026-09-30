@@ -180,11 +180,14 @@ the starter set it rather than moving it for the sake of moving it.
 
 **2.** Before finalizing my five test questions, I asked Claude to pressure-test them by actually running each one through the live pipeline rather than reasoning about them abstractly. Two of my five had a real problem it caught this way: my health center question asked for "weekday hours" expecting an opening-closing range, but the source document only ever states walk-in hours (8am-11am) — there's no closing time anywhere in it, so no correct answer could ever have matched what I'd written for `expects`. Similarly, my Pellew dining hall question asked for "hours," which the live system correctly answered with the operating hours (7am-8pm) — not the peak wait-time window (11:45-12:30) I actually meant for `expects` to check. I reworded both questions to ask for the specific fact I actually wanted, then reran them live to confirm the new wording retrieved cleanly and the answer matched the updated `expects` phrase before writing anything into `questions.py`.
 
-**3. (Unit 2)** I had Claude plan and run the unit 2 test: write the
-scoring rules (`scorer.py`, `tools/score_run.py`) and commit them before
-the first run, run both evals, and draft the verdicts and diagnoses. Three
-things it caught are worth recording, because each would have made the
-evidence wrong:
+**3. (Unit 2)** After designing my plan for this unit — score against my
+unit 1 criteria as written, fix the scoring rules before the first run, and
+make one improvement chosen from the diagnosis — I used Claude as an
+assistant to revise and audit my ideas and the evidence. It turned my
+scoring rules into code (`scorer.py`, `tools/score_run.py`), ran both
+evals, drafted the verdicts and diagnoses for me to review, and checked
+each step against the unit's requirements. Three things its auditing caught
+are worth recording, because each would have made the evidence wrong:
 
 - **A corrupted index.** Its first retrieval check showed best distances
   near 0.9 for every question, against the 0.175–0.425 in `criteria.md`.
@@ -201,9 +204,10 @@ evidence wrong:
   it spotted the near-duplicate crowding: a hall review's split-off laundry
   paragraph and that hall's laundry post, taking two of the five slots each.
 
-It also argued the opposite verdict on each close call (Milestone 2's
-check). That's how the "three halls presented as all of them" gap got into
-the criterion 5 verdict instead of being passed over.
+It also argued the opposite verdict against my calls on each close
+criterion (Milestone 2's check). That's how the "three halls presented as
+all of them" gap got into the criterion 5 verdict instead of being passed
+over.
 
 **Stretch features:** None attempted in unit 1. Unit 2: none. The second
 improvement, the grounding-prompt change, is written up under What's
