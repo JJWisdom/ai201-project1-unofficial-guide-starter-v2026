@@ -412,34 +412,88 @@ shape, since there are seven noise posts and several dining posts.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** `TOP_K` in `config.py`, from 5 to 10. That's the only
+change. The chunker, index, prompt, gate cutoff and model are the same as
+in the before run.
 
-**Why I picked it:**
+**Why I picked it:** Diagnosis 2 found near-duplicate chunks filling the
+top 5 for the laundry question, so the model only ever saw 3 of the 7
+halls. At top-k = 10, all seven halls' laundry posts are retrieved (ranks
+3–10 in the table above). I chose this over diagnosis 1, the overlap
+starting mid-sentence, because the laundry gap produces a wrong claim for
+the user. The overlap problem is a cosmetic flaw in two chunks.
 
-<!-- Connect it to a specific diagnosis above in one sentence. If you can't,
-     you picked a fix because it sounded impressive. -->
+**How I measured the targeted failure.** None of the five criteria counts
+halls, because criterion 5 passes at two. So alongside the criteria, I
+counted how many of the 7 halls the laundry answer covers, using
+`tools/score_run.py`'s "halls named" line on both result files. I did
+**not** change criterion 5.
 
 ### Run Log — After
 
-<!-- Same format, same five criteria, three runs each.
-     `python run_eval.py --label after` -->
+Raw evidence: [results/run_2026-09-30_0004_after.md](results/run_2026-09-30_0004_after.md)
+(`python run_eval.py --label after`, caching off, 15 real model calls,
+top-k 10, cutoff 0.6), scored by `tools/score_run.py`.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunks contain the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Sampled chunks are complete thoughts, none under 178 chars, ≥2 docs split | 4 of 5, all parts | 5/5 | 5/5 | 4/5 | MET |
+| 5. Laundry answer doesn't silently pick one hall | 1 of 1 | 1/1 | 1/1 | 1/1 | MET |
 
-**Did it help?**
+**Side by side, including what the change was aimed at:**
 
-<!-- Say plainly whether it did, and how you know. If it made things worse,
-     say that — a change that backfired, honestly reported, earns full credit
-     and is more interesting than one that worked. What matters is that you can
-     tell.
+| Measure | Before (top-k 5) | After (top-k 10) |
+|---|---|---|
+| Criteria met | 5 of 5 | 5 of 5 (unchanged) |
+| Halls whose laundry chunks were **retrieved** | 3 of 7 | **7 of 7** |
+| Halls **named in the laundry answer**, runs 1 / 2 / 3 | 3 / 3 / 3 | **2 / 6 / 3** |
+| Laundry answers opening with a blanket "laundry is not free" | 3 of 3 | 3 of 3 |
+| Laundry answers mentioning Tamsin Court (in-unit, no per-load price) | 0 of 3 | 0 of 3 |
+| Input tokens for the 15 calls | 9,555 | 17,001 (+78%) |
 
-     Milestone 4. -->
+Real output, laundry question, run 1 after. It covers fewer halls than
+any before run, even though all seven were in its context:
+
+```
+Based on the provided documents, laundry is not free. Each dorm has specific costs for washing and drying (for example, $1.75 to wash and $1.75 to dry in Innisfree Hall, and $1.50 to wash and $1.50 to dry in Old Brewhouse). 
+
+Sources: `housing_innisfree_hall.txt` and `housing_old_brewhouse.txt`
+```
+
+Run 2 after, the best answer either run log produced (six halls, each
+with its source):
+
+```
+Based on the documents, laundry is not free. It costs varying amounts depending on the building, such as $1.75 for a wash and $1.75 for a dry in Innisfree Hall (`housing_innisfree_hall.txt`), $1.50 for a wash and $1.50 for a dry in Old Brewhouse (`housing_old_brewhouse.txt`), $1.75 for a wash and $1.50 for a dry in Aldridge Hall (`housing_aldridge_hall.txt`), $2.00 for a wash and $1.75 for a dry in Fenwick Court (`housing_fenwick_court_laundry.txt`), $1.50 for a wash and $1.25 for a dry in Morrow House (`housing_morrow_house_laundry.txt`), and $2.00 for a wash and $1.75 for a dry in Calder Annexe (`housing_calder_annexe_laundry.txt`).
+```
+
+**Did it help?** It fixed the stage it was aimed at, but not the failure.
+Retrieval went from 3 to 7 of 7 halls, which the retrieval ranking shows
+directly. The answer went from a steady 3 halls to 2, 6 and 3. That averages
+slightly higher (3.7 against 3.0), but the answers are less consistent,
+and one run is worse than every before run. All three answers still open
+with the unsupported blanket claim, and none mentions Tamsin Court. None
+of the five criteria moved, and input tokens went up 78%. I know which stage
+is left because the evidence is in the context in every after run: all
+seven halls reach the model, and the model picks examples from them. The
+bottleneck has moved from **retrieval to generation**. The grounding
+prompt says "Be brief. Two or three sentences is usually enough", which
+pushes the model to summarise with a couple of examples ("such as…") rather
+than enumerate. I'm keeping the change, because any generation-side fix
+needs all seven halls in the context to work with. On its own, it did not
+make the laundry answer reliably complete.
+
+**A measurement error, reported rather than fixed after the fact.**
+`run_eval.py`'s per-question columns in the after file show the health
+centre question as "fail" in runs 1 and 2. Those answers say "8:00 am to
+11:00 am", which is correct. `scorer.py`'s normaliser doesn't treat ":00"
+as optional, so it misses them. None of the five criteria is scored from
+that column, and the before run didn't phrase the time that way, so no
+verdict changes. I left the rule as committed rather than editing it after
+seeing results. The fix is to strip ":00" in `scorer.normalise`.
 
 ## What's Still Broken
 

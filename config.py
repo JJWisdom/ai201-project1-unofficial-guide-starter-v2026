@@ -41,7 +41,11 @@ MIN_CHUNK_SIZE = None
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
 
-TOP_K = 5               # how many chunks to pull back per question
+# Unit 2 improvement: was 5. At 5, "Is laundry free in the dorms?" filled its
+# slots with near-duplicates (a hall review's laundry paragraph plus that
+# hall's laundry post), so the model saw 3 of 7 halls. At 10 all seven halls'
+# laundry posts are retrieved. See README, "The Improvement".
+TOP_K = 10              # how many chunks to pull back per question
 
 # The relevance gate. If the best chunk is further away than this, the system
 # refuses to answer instead of handing the model thin material.
