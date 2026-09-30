@@ -192,46 +192,126 @@ the starter set it rather than moving it for the sake of moving it.
 
 ## Run Log — Before
 
-<!-- Your five criteria, three runs each. `python run_eval.py --label before`
-     runs the questions, puts the OUT_OF_SCOPE ones through the gate, and
-     writes it all into results/ for you. Targets come from criteria.md; the
-     verdict column is your call.
+Raw evidence: [results/run_2026-09-30_0001_before.md](results/run_2026-09-30_0001_before.md),
+produced by `run_eval.py::main` with `python run_eval.py --label before`
+(caching off, 15 real model calls, top-k 5, cutoff 0.6). The table below
+is `python tools/score_run.py results/run_2026-09-30_0001_before.md`.
 
-     Criterion 3 is measured in one deterministic pass rather than three, so
-     the same number goes in all three run columns. That's correct, not lazy.
+**How it's scored.** The scoring rules were committed (`scorer.py`,
+`tools/score_run.py`, commit `6572350`) before this run existed. The rule
+for each criterion:
 
-     Milestone 1. -->
+- **1.** A retrieved chunk contains the `expects` phrase, after normalising
+  times and ranges. For the laundry question, the chunks must include
+  laundry prices from at least two halls.
+- **2.** The answer names a corpus filename. A refusal counts as a fail.
+- **3.** Read from the gate table in the results file.
+- **4.** For run N, a random sample of 5 chunks from the index (seed N). A
+  chunk passes if it starts where a sentence starts and ends on
+  sentence-final punctuation. Also checked: no chunk from a split document
+  is under 178 characters, and at least two documents split.
+- **5.** The laundry answer names at least two halls, or asks which one.
+
+Criteria 1, 3 and 4 don't involve the model, so they can't vary between
+runs. Retrieval is deterministic and the gate is a comparison against a
+fixed number, so criteria 1 and 3 repeat the same number in all three
+columns. Criterion 4 draws a different sample of chunks each run. The
+identical columns aren't a cache artifact: the 15 answers were generated
+separately, and their wording differs (see below).
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunks contain the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Sampled chunks are complete thoughts, none under 178 chars, ≥2 docs split | 4 of 5, all parts | 5/5 | 5/5 | 4/5 | MET |
+| 5. Laundry answer doesn't silently pick one hall | 1 of 1 | 1/1 | 1/1 | 1/1 | MET |
 
-<!-- Underneath, paste the REAL output for each criterion from one of your
-     runs — the actual text your system produced, not a description of it.
-     Name the file and function that produced it. -->
+**Real output, criterion by criterion.** All answers below come from
+`run_eval.py::run_once`, which calls `generate.py::answer_from_chunks`
+after retrieval with `store.py::search`.
+
+**Criterion 1.** Deterministic retrieval, from `tools/score_run.py`:
+
+```
+✓ What are the University Health Center's walk-in hours? — found in health_center.txt#0
+✓ When is the wait longest at Pellew Dining Hall? — found in dining_pellew_dining_hall.txt#0, dining_the_ridgeway_cafe_followup.txt#0
+✓ How many pages per semester can an undergraduate print? — found in admin_printing_quota.txt#0
+✓ How often does the campus shuttle run on weekdays? — found in transit_shuttle.txt#0
+✓ Is laundry free in the dorms? — laundry chunks from 3 hall(s): Aldridge Hall, Innisfree Hall, Old Brewhouse
+```
+
+**Criterion 2.** Run 1 answer to the printing question:
+
+```
+Every student gets $30 of printing per semester, which is roughly 600 black-and-white pages (admin_printing_quota.txt).
+```
+
+Run 2 answer to the walk-in hours question:
+
+```
+The University Health Center's walk-in hours are from 8am to 11am. 
+
+Source: health_center.txt
+```
+
+**Criterion 3.** From `run_eval.py::check_out_of_scope`:
+
+```
+refused  (best distance 0.825)  What is the capital of Mongolia?
+refused  (best distance 0.934)  How do I change the oil in a diesel engine?
+refused  (best distance 0.886)  Who won the 1994 World Cup?
+refused  (best distance 0.844)  What is the recommended dosage of ibuprofen for a headache?
+refused  (best distance 0.896)  How do I write a for loop in Rust?
+-> gate refused 5 of 5
+```
+
+**Criterion 4.** Run 3 sample, from `tools/score_run.py`. The chunks were
+produced by `chunker.py::split_documents`.
+
+```
+documents split: 2 (housing_innisfree_hall.txt, housing_old_brewhouse.txt)
+split-produced chunks under 178: none
+run 3: course_engl_205_exams.txt#0, housing_old_brewhouse.txt#0, housing_innisfree_hall.txt#1, advising_registration.txt#0, dining_kestrel_commons_followup.txt#0; cut at an edge: housing_innisfree_hall.txt#1
+```
+
+The chunk that failed, `housing_innisfree_hall.txt#1`, starts mid-sentence:
+
+```
+arrangement is the best compromise on campus.
+
+The bad: no air conditioning, which matters for the first three weeks of September.
+
+Laundry costs $1.75 wash, $1.75 dry, app-based. On noise: moderate; the building is L-shaped and the short wing is much quieter.
+```
+
+For comparison, a chunk that passed, `admin_printing_quota.txt#0`:
+
+```
+On the printing quota
+
+Every student gets $30 of printing per semester, which is roughly 600 black-and-white pages. It does not roll over. Colour costs eight times as much per page, which people discover after printing one poster.
+```
+
+**Criterion 5.** Run 1 answer to the laundry question:
+
+```
+Based on the documents, laundry is not free. 
+
+- In Innisfree Hall, it costs $1.75 for a wash and $1.75 for a dry (`housing_innisfree_hall.txt`).
+- In Old Brewhouse, it costs $1.50 for a wash and $1.50 for a dry (`housing_old_brewhouse.txt`).
+- In Aldridge Hall, it costs $1.75 for a wash and $1.50 for a dry (`housing_aldridge_hall_laundry.txt`).
+```
 
 ## Verdicts
 
-<!-- MET or MISSED for each of the five, against the target you wrote last
-     unit — not a new one. Plus a sentence on how you decided. That sentence
-     matters most where it was close.
-
-     If your target said 4 of 5 and your runs came out 4, 3, 4, that's a MISS.
-     The target has to hold, not show up occasionally.
-
-     Milestone 2. -->
-
 | # | Criterion | Verdict | How I decided |
 |---|---|---|---|
-| 1 |  |  |  |
-| 2 |  |  |  |
-| 3 |  |  |  |
-| 4 |  |  |  |
-| 5 |  |  |  |
+| 1 | Retrieved chunks contain the answer (4 of 5) | MET | All five questions retrieved a chunk with the answer (5/5, above the 4-of-5 target). Retrieval is deterministic, so all three runs show the same 5/5. |
+| 2 | Every answer names a source (5 of 5) | MET | All 15 answers name a filename. None was refused, so none failed on that rule either. The format drifts (inline parentheses, a "Source:" line, backticks, italics), but every one names the file. |
+| 3 | Gate stops out-of-corpus questions (4 of 5) | MET | 5 of 5 refused. The closest one (0.825) is still 0.225 above the 0.6 cutoff, so this isn't close. |
+| 4 | Chunk quality (4 of 5, and all parts) | MET, and this was the closest call | Run 3 scored 4/5, exactly at the target: `housing_innisfree_hall.txt#1` opens mid-sentence ("arrangement is the best compromise…"). The other two parts are also right at their bar: exactly 2 documents split, against a target of at least two. Each part holds, but none with any margin. |
+| 5 | Laundry answer doesn't pick one hall (1 of 1) | MET | All three answers list three halls, with prices and sources, which is exactly what the criterion asks for. The strongest case for MISSED: all three answers open with "laundry is not free" as a blanket fact about the dorms, when they cover only 3 of the 7 halls. That's the failure this criterion was meant to catch, just with three halls instead of one. I kept MET because the criterion as written says "list at least two hall-specific policies with sources", and moving the bar after seeing results is what the rules say not to do. The gap is picked up in the diagnosis below. |
 
 ## Diagnoses
 
