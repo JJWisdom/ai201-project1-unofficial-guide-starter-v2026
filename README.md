@@ -180,7 +180,34 @@ the starter set it rather than moving it for the sake of moving it.
 
 **2.** Before finalizing my five test questions, I asked Claude to pressure-test them by actually running each one through the live pipeline rather than reasoning about them abstractly. Two of my five had a real problem it caught this way: my health center question asked for "weekday hours" expecting an opening-closing range, but the source document only ever states walk-in hours (8am-11am) — there's no closing time anywhere in it, so no correct answer could ever have matched what I'd written for `expects`. Similarly, my Pellew dining hall question asked for "hours," which the live system correctly answered with the operating hours (7am-8pm) — not the peak wait-time window (11:45-12:30) I actually meant for `expects` to check. I reworded both questions to ask for the specific fact I actually wanted, then reran them live to confirm the new wording retrieved cleanly and the answer matched the updated `expects` phrase before writing anything into `questions.py`.
 
-**Stretch features:** None attempted this unit.
+**3. (Unit 2)** I had Claude plan and run the unit 2 test: write the
+scoring rules (`scorer.py`, `tools/score_run.py`) and commit them before
+the first run, run both evals, and draft the verdicts and diagnoses. Three
+things it caught are worth recording, because each would have made the
+evidence wrong:
+
+- **A corrupted index.** Its first retrieval check showed best distances
+  near 0.9 for every question, against the 0.175–0.425 in `criteria.md`.
+  The cause: the staff smoke test (`tools/smoke_test.py`), run while
+  verifying the unit 1 chunker fix, had rebuilt the real `campus_life`
+  index with its fake stand-in embeddings. It rebuilt the index with
+  `app.py index` and confirmed all ten distances matched the unit 1
+  measurements exactly before running the baseline.
+- **A scorer parser bug.** The first scoring pass reported 1 of 5 answers
+  naming a source. Reading the raw answers showed all 15 did. The parser
+  had read only run 1. It fixed the parser and changed no rules, which is
+  documented in commit `6f1c717`.
+- **The laundry pattern.** Looking at the top 15 for the laundry question,
+  it spotted the near-duplicate crowding: a hall review's split-off laundry
+  paragraph and that hall's laundry post, taking two of the five slots each.
+
+It also argued the opposite verdict on each close call (Milestone 2's
+check). That's how the "three halls presented as all of them" gap got into
+the criterion 5 verdict instead of being passed over.
+
+**Stretch features:** None attempted in unit 1. Unit 2: none. The second
+improvement, the grounding-prompt change, is written up under What's
+Still Broken but not made.
 
 ---
 
@@ -505,9 +532,66 @@ seeing results. The fix is to strip ":00" in `scorer.normalise`.
 
      Milestone 5. -->
 
+No criterion is missed, before or after. But "all five met" isn't
+"nothing broken". These are the problems the runs found that my criteria
+were too loose to catch:
+
+1. **The laundry answer is still incomplete, and it overstates.** This is a
+   generation-stage problem. With all seven halls now retrieved, the model
+   still names 2–6 of them, still opens with "laundry is not free" for every
+   dorm, and never mentions Tamsin Court's in-unit washer-dryer. **Next:**
+   change the grounding prompt (`generate.py::GROUNDING_INSTRUCTION`). When
+   the documents give different values per building, list every building,
+   or say explicitly which ones the answer covers. The "Be brief" rule would
+   need an exception for that case. **Why I stopped:** this unit allows one
+   change, and I used it on top-k. The prompt change would be a second
+   improvement, and I'd measure it the same way: the halls-named count and
+   the blanket-claim count across three runs.
+2. **Chunks after the first in a split document start mid-sentence.** This
+   is the chunking stage. The overlap is trimmed to a word boundary but not
+   a sentence boundary, so `housing_innisfree_hall.txt#1` opens
+   "arrangement is the best compromise on campus." **Next:** start the
+   overlap tail at the first sentence boundary inside it, or drop it if
+   there isn't one. **Why I stopped:** it affects the 2 split-off chunks out
+   of 90, and it cost criterion 4 one sampled chunk in one run. The laundry
+   problem gives users wrong answers; this one doesn't.
+3. **The scorer's ":00" false negative.** "8:00 am" isn't matched to "8am",
+   so the per-question column in the after file shows two false fails for
+   the health centre question. **Next:** make ":00" optional in
+   `scorer.normalise`. **Why I stopped:** it changes no verdict, and editing
+   a scoring rule after seeing the results it scores is exactly the thing
+   this unit says not to do. I'd fix it before the next unit's baseline, not
+   inside this one.
+4. **The test set has only one question whose answer is spread across
+   documents.** The near-duplicate crowding in diagnosis 2 should also hit
+   noise (seven `housing_*_noise.txt` posts) and cross-hall dining
+   questions, but I have no test question that would show it.
+
 ## What I'd Do Differently
 
-<!-- Knowing what you know now — which of your five criteria would you write
-     differently, and why?
+Three of my five criteria passed because of how I wrote them, not because
+of the system:
 
-     Milestone 5. -->
+- **Criterion 1**, "the retrieved chunks include one that contains the
+  answer", counts any of the top 5 (now 10). I'd write "the top-ranked
+  chunk contains the answer for at least 4 of 5". Scored against the same
+  before run, that version gives 3 of 5 and misses, on Pellew and laundry.
+  A criterion that can catch the Pellew near-miss is worth more than one
+  that can't.
+- **Criterion 3's** out-of-scope questions (Mongolia, diesel engines, Rust)
+  are too far from the corpus to test the cutoff. I'd keep 4 of 5, but use
+  questions that sound like campus life and aren't covered, so the gate has
+  to separate close from not-quite.
+- **Criterion 5** should have said what I meant: "the answer covers every
+  hall, or says which halls it covers". "At least two halls" passed an
+  answer that claims something about all seven halls from three of them.
+- **Criterion 4's** sample is too easy. 86 of 90 chunks are whole documents,
+  which pass the complete-thought check by construction. I'd sample only
+  from chunks produced by splitting, since those are the chunks my chunker
+  actually made decisions about.
+
+I'd also write down scoring rules like `scorer.py`'s *as part of* each
+criterion in unit 1. Several judgment calls, like what counts as "the
+answer" for the laundry question and whether a refusal counts as naming a
+source, had to be made in unit 2, before the run but after the criteria.
+They belonged next to the targets.
