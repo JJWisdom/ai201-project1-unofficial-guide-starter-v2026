@@ -279,7 +279,8 @@ Rules:
 - Use only the information in the documents below. Do not use anything you know from elsewhere.
 - If the documents don't cover the question, say you don't have enough information. Do not guess.
 - Name the document your answer came from, using the filename given in each excerpt.
-- Be brief. Two or three sentences is usually enough."""
+- If the documents give different answers for different buildings or options, list every one they mention, each with its filename. Do not make a general claim about all of them that the documents only support for some.
+- Be brief. Two or three sentences is usually enough, unless you are listing different answers per building or option."""
 
 
 def build_prompt(question: str, results) -> str:

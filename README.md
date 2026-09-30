@@ -189,7 +189,7 @@ the starter set it rather than moving it for the sake of moving it.
 
 It also argued the opposite verdict against my call on every close criterion, which is the Milestone 2 check. That is how the gap in criterion 5, three halls presented as if they were all of them, ended up in the verdict instead of getting skipped over.
 
-**Stretch features:** None in unit 1. Unit 2: a second measured improvement, a change to the grounding prompt. It is declared in "Second Improvement (Stretch)" below before any of it was built.
+**Stretch features:** None in unit 1. Unit 2: a second measured improvement, a change to the grounding prompt. It is declared in "Second Improvement (Stretch)" below before any of it was built. The declaration is its own commit, `edc392a`, ahead of the code change and the run.
 
 ---
 
@@ -390,7 +390,7 @@ One measurement error, reported and not fixed after the fact. The per-question c
 
 ## Second Improvement (Stretch)
 
-Declared before building. Nothing in this section exists in the code yet.
+Everything down to "What I changed" was committed on its own before anything was built, in commit `edc392a`. The results below came after.
 
 What I am going to change: the grounding prompt, `GROUNDING_INSTRUCTION` in `generate.py`. I am adding one rule. When the documents give different answers for different buildings or options, list every one the documents mention with its file, and do not make a general claim about all of them that the documents only support for some. The "Be brief" rule gets an exception for that case. Top-k stays at 10, and everything else stays the same as the first improvement's after run.
 
@@ -404,11 +404,78 @@ How I will measure it, decided now: the full test again with `python run_eval.py
 
 It also has to not break anything else. If criterion 2 drops, or the other four answers get worse, that counts against it.
 
+### What I changed
+
+Two lines in `GROUNDING_INSTRUCTION` in `generate.py`. This rule is new:
+
+```
+- If the documents give different answers for different buildings or options, list every one they mention, each with its filename. Do not make a general claim about all of them that the documents only support for some.
+```
+
+And the brevity rule went from "Be brief. Two or three sentences is usually enough." to:
+
+```
+- Be brief. Two or three sentences is usually enough, unless you are listing different answers per building or option.
+```
+
+### Run Log - After Second Improvement
+
+The raw file is [results/run_2026-09-30_0023_after2.md](results/run_2026-09-30_0023_after2.md), from `python run_eval.py --label after2`, with caching off, 15 real model calls, top-k 10, and the cutoff at 0.6. Scored by `tools/score_run.py`.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Retrieved chunks contain the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Sampled chunks are complete thoughts, none under 178 characters, at least 2 documents split | 4 of 5, all parts | 5/5 | 5/5 | 4/5 | MET |
+| 5. Laundry answer does not silently pick one hall | 1 of 1 | 1/1 | 1/1 | 1/1 | MET |
+
+All three logs next to each other, using the measures I declared above:
+
+| Measure | Before (top-k 5) | After first (top-k 10) | After second (top-k 10 + prompt) |
+|---|---|---|---|
+| Criteria met | 5 of 5 | 5 of 5 | 5 of 5 |
+| Halls named in the laundry answer, runs 1 / 2 / 3 | 3 / 3 / 3 | 2 / 6 / 3 | 7 / 7 / 7 |
+| Laundry answers that mention Tamsin Court | 0 of 3 | 0 of 3 | 3 of 3 |
+| Blanket claims, by the rule declared above | 3 of 3 | 3 of 3 | 3 of 3 |
+| Input tokens for the 15 calls | 9,555 | 17,001 | 17,811 |
+| Output tokens for the 15 calls | 850 | 856 | 1,348 |
+
+The run 2 laundry answer after the second improvement:
+
+```
+Based on the documents provided, laundry is not free. The costs per wash and dry vary by building:
+
+* **Innisfree Hall:** Costs $1.75 to wash and $1.75 to dry (housing_innisfree_hall.txt, housing_innisfree_hall_laundry.txt).
+* **Old Brewhouse:** Costs $1.50 to wash and $1.50 to dry (housing_old_brewhouse.txt, housing_old_brewhouse_laundry.txt).
+* **Aldridge Hall:** Costs $1.75 to wash and $1.50 to dry (housing_aldridge_hall_laundry.txt, housing_aldridge_hall.txt).
+* **Fenwick Court:** Costs $2.00 to wash and $1.75 to dry (housing_fenwick_court_laundry.txt).
+* **Morrow House:** Costs $1.50 to wash and $1.25 to dry (housing_morrow_house_laundry.txt).
+* **Calder Annexe:** Costs $2.00 to wash and $1.75 to dry (housing_calder_annexe_laundry.txt).
+* **Tamsin Court:** Has in-unit washer-dryer (housing_tamsin_court_laundry.txt), but the documents do not specify a price for them.
+```
+
+And one of the other four, to show they did not change. This is the run 1 shuttle answer:
+
+```
+The campus shuttle runs a loop every 20 minutes on weekdays (from transit_shuttle.txt).
+```
+
+### Did it help?
+
+Yes, for coverage, and that part is not close. The laundry answer went from 2, 6, and 3 halls to all 7 in every run, and Tamsin Court went from never mentioned to mentioned in all three. The answer is also consistent now. After the first improvement it swung between 2 and 6 halls. Now it is 7 every time.
+
+It did not fix the blanket claim. By the rule I wrote down before running it, that is still 3 of 3. Every answer still opens with "laundry is not free" and then, a few lines down, says Tamsin Court's price is not specified. So the answer contradicts itself. The difference is that the contradiction is now visible to the person reading it, where before Tamsin was just missing. The model followed the list-every-building part of the new rule and ignored the do-not-generalize part.
+
+Nothing else got worse. The five criteria are the same, the other four answers are still one or two sentences, and all 12 of them are correct and name their file. The cost is 57% more output tokens, because the laundry answer is now a seven-line list. Input tokens only went up 5%, which is the longer prompt.
+
+The per-question columns in this file are all pass, including the health center question. That is not the scorer being fixed. All three answers happened to say "8am to 11am" this time, so the ":00" problem did not come up.
+
 ## What's Still Broken
 
 No criterion is missed, before or after. All five met is not the same as nothing broken. These are the problems the runs turned up that my criteria were too loose to catch.
 
-1. The laundry answer is still incomplete and it still overstates. This is generation. With all seven halls retrieved, the model still names anywhere from 2 to 6 of them, still opens with laundry is not free for every dorm, and never mentions Tamsin Court's in-unit washer-dryer. The next step is changing the grounding prompt, `generate.py::GROUNDING_INSTRUCTION`, so that when the documents give different values per building it lists every building, or says which ones it is covering. The "Be brief" rule needs an exception for that. I stopped because this unit allows one change and I used it on top-k. The prompt change would be a second improvement, measured the same way, halls named and blanket claims across three runs.
+1. The laundry answer still overstates. This is generation. The second improvement fixed coverage, all 7 halls in every run, but every answer still opens with "laundry is not free" and then admits Tamsin Court's price is not listed. The prompt rule has two halves and the model only follows the first one. The next thing I would try is making the rule about the opening line specifically, something like answer the yes or no part only for the buildings the documents give a price for, and say which ones are unknown. I stopped here because the stretch allows one more measured change and this was it. A third prompt change without a third run log would be exactly the kind of change I could not tell apart from the second.
 2. Split chunks after the first one start mid-sentence. This is chunking. The overlap is trimmed to a word boundary but not a sentence boundary, so `housing_innisfree_hall.txt#1` opens with "arrangement is the best compromise on campus." The next step is starting the overlap at the first sentence boundary inside it, or dropping it if there is not one. I stopped because it affects 2 chunks out of 90, and it cost criterion 4 one sampled chunk in one run. The laundry problem gives people wrong answers. This one does not.
 3. The scorer misses "8:00 am". It does not match it to "8am", so the per-question column in the after file shows two false fails on the health center question. The next step is making ":00" optional in `scorer.normalize`. I stopped because it changes no verdict, and editing a scoring rule after seeing the results it scores is the exact thing this unit says not to do. I would fix it before the next baseline, not in the middle of this one.
 4. The test set only has one question where the answer is spread across documents. The near duplicate problem from diagnosis 2 should also hit noise, with seven `housing_*_noise.txt` posts, and questions that compare dining halls. I have no test question that would show it.
