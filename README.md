@@ -189,7 +189,7 @@ the starter set it rather than moving it for the sake of moving it.
 
 It also argued the opposite verdict against my call on every close criterion, which is the Milestone 2 check. That is how the gap in criterion 5, three halls presented as if they were all of them, ended up in the verdict instead of getting skipped over.
 
-**Stretch features:** None in unit 1. Unit 2: none yet.
+**Stretch features:** None in unit 1. Unit 2: a second measured improvement, a change to the grounding prompt. It is declared in "Second Improvement (Stretch)" below before any of it was built.
 
 ---
 
@@ -387,6 +387,22 @@ Did it help? It fixed the stage it was aimed at, but not the failure. Retrieval 
 I know which stage is left because the evidence is sitting in the context in every after run. All seven halls reach the model and the model picks a couple of examples out of them. The problem moved from retrieval to generation. The grounding prompt says "Be brief. Two or three sentences is usually enough." and that pushes the model to summarize with a "such as" instead of listing every hall. I am keeping the change, because any fix on the generation side needs all seven halls in the context to work with. On its own though, it did not make the laundry answer reliably complete.
 
 One measurement error, reported and not fixed after the fact. The per-question columns in the after file show the health center question failing in runs 1 and 2. Those answers say "8:00 am to 11:00 am", which is right. The normalizer in `scorer.py` does not treat ":00" as optional, so it missed them. None of the five criteria are scored from that column, and the before run never phrased the time that way, so no verdict changes. I left the rule the way it was committed instead of editing it after seeing results. The fix is to strip ":00" in `scorer.normalize`.
+
+## Second Improvement (Stretch)
+
+Declared before building. Nothing in this section exists in the code yet.
+
+What I am going to change: the grounding prompt, `GROUNDING_INSTRUCTION` in `generate.py`. I am adding one rule. When the documents give different answers for different buildings or options, list every one the documents mention with its file, and do not make a general claim about all of them that the documents only support for some. The "Be brief" rule gets an exception for that case. Top-k stays at 10, and everything else stays the same as the first improvement's after run.
+
+Which failure it is meant to fix: the one the first improvement left behind. After top-k went to 10, all seven halls reach the model, but the answer still names anywhere from 2 to 6 of them, opens with a blanket "laundry is not free" in 3 of 3 runs, and never mentions Tamsin Court. That is the generation stage.
+
+How I will measure it, decided now: the full test again with `python run_eval.py --label after2`, three runs, caching off, scored by `tools/score_run.py` into the same five-row table. Next to that, the same three numbers from the first improvement.
+
+- Halls named in the laundry answer, out of 7, per run. The "halls named" line from `tools/score_run.py`.
+- Blanket claims, out of 3. An answer counts as a blanket claim if it says laundry is or is not free for the dorms in general without limiting that to the halls it lists.
+- Answers that mention Tamsin Court, out of 3.
+
+It also has to not break anything else. If criterion 2 drops, or the other four answers get worse, that counts against it.
 
 ## What's Still Broken
 
