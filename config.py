@@ -32,19 +32,19 @@ CORPUS = os.getenv("AI201_CORPUS", "campus_life")
 CHUNK_SIZE = 350        # target characters per chunk, once a doc is split
 CHUNK_OVERLAP = 60      # characters of trailing context shared between chunks
 SPLIT_THRESHOLD = 400   # documents at or under this length stay one chunk
-# Floor for a split-produced chunk. None derives it from the corpus being
-# chunked — its shortest whole document, capped at half of CHUNK_SIZE — so
-# switching corpora doesn't leave a stale number behind. Set an int to
-# override. See chunker.py::min_chunk_size.
+# Floor for a chunk cut out of a longer document. None means it gets worked
+# out from the corpus: the shortest whole document, capped at half of
+# CHUNK_SIZE. That way switching corpora does not leave a stale number
+# behind. Set a number here to override it. See chunker.py::min_chunk_size.
 MIN_CHUNK_SIZE = None
 
 
 # ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
 
-# Unit 2 improvement: was 5. At 5, "Is laundry free in the dorms?" filled its
-# slots with near-duplicates (a hall review's laundry paragraph plus that
-# hall's laundry post), so the model saw 3 of 7 halls. At 10 all seven halls'
-# laundry posts are retrieved. See README, "The Improvement".
+# Unit 2 improvement. This was 5. At 5, "Is laundry free in the dorms?" filled
+# its slots with near duplicates, a hall review's laundry paragraph plus that
+# same hall's laundry post, so the model only saw 3 of the 7 halls. At 10
+# every hall's laundry post gets retrieved. See "The Improvement" in the README.
 TOP_K = 10              # how many chunks to pull back per question
 
 # The relevance gate. If the best chunk is further away than this, the system

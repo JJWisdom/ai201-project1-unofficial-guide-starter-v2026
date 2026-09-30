@@ -4,16 +4,18 @@ Assertion checks for chunker.py::split_documents.
 
     python tools/check_chunks.py
 
-The README makes claims about what the chunker produces — no split-produced
-chunk under the floor, every chunk carries a source, overlap starts on a word
-boundary, at least two campus_life documents actually split. This checks them
-instead of trusting prose, and it checks them at a sweep of CHUNK_SIZE values
-and against every shipped corpus, because the title-fragment bug only showed
-up away from the default settings.
+The README makes claims about what the chunker produces. No chunk from a
+split document is under the floor, every chunk carries a source, the overlap
+starts on a word boundary, and at least two campus_life documents actually
+split. This checks those claims instead of trusting what I wrote. It runs
+them across a range of CHUNK_SIZE values and against every corpus that ships
+with the repo, because the title fragment bug only showed up away from the
+default settings.
 
-It prints the corpus numbers the docs used to hard-code, so when you need them,
-copy them from here rather than from a comment that may have drifted.
-Exits non-zero on the first failing sweep, listing every violation found.
+It also prints the corpus counts that used to be written into the comments.
+If you need those numbers, take them from here and not from a comment that
+may have gone stale. It exits non-zero if any sweep fails and lists every
+problem it found.
 """
 
 import sys
@@ -54,8 +56,8 @@ def violations(docs: list[Document], chunks: list[Chunk], floor: int) -> list[st
         for c in own:
             if len(c.text) < floor:
                 problems.append(f"{c.label}: {len(c.text)} chars, under floor {floor}")
-            # Overlap is trimmed to a word boundary, so each chunk should start
-            # where a word starts in the original document.
+            # The overlap is trimmed to a word boundary, so every chunk should
+            # start where a word starts in the original document.
             head = c.text[:20]
             at = doc.text.find(head)
             if at > 0 and not doc.text[at - 1].isspace():

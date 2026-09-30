@@ -1,34 +1,43 @@
 #!/usr/bin/env python3
 """
-Turn one run_eval.py results file into the per-criterion run log.
+Turns one run_eval.py results file into the per-criterion run log.
 
     python tools/score_run.py results/run_<stamp>_before.md
 
-run_eval.py writes one row per QUESTION. The README's run log is one row per
-CRITERION (see criteria.md). This reads the committed results file — the
-answers exactly as they were produced, not a fresh generation — and applies
-the rules below, which were written before the first run:
+run_eval.py writes one row per question. The run log in the README is one
+row per criterion (see criteria.md), so something has to roll the questions
+up. This reads the committed results file, meaning the answers exactly as
+they came back and not a new generation, and applies the rules below. I
+wrote these rules before the first run.
 
-1. Retrieved chunks contain the answer. Re-runs retrieval for each question
-   against the same index variant and top-k the file names (retrieval is
-   deterministic, so this is the same retrieval the run saw) and checks the
-   chunk texts with scorer.contains_expected. For the laundry question, the
-   chunks must include laundry arrangements from at least two halls. Same
-   number in every run column, because retrieval doesn't vary.
+1. Retrieved chunks contain the answer. Retrieval is run again for each
+   question against the same index variant and top-k the file names.
+   Retrieval is deterministic, so this is the same retrieval the run saw.
+   The chunk text is checked with scorer.contains_expected. For the laundry
+   question the chunks need laundry details from at least two halls. The
+   number is the same in every run column because retrieval does not vary.
+
 2. Every answer names a source. An answer passes if it names at least one
-   corpus filename (with or without ".txt"). A refusal names no source, so
-   an in-scope question refused — by the gate or by the model — fails.
-3. Gate refuses out-of-corpus questions. Read straight from the file's gate
-   table. One deterministic pass, so the same number in every column.
-4. Chunk quality. For run N, a random sample of 5 chunks (seed N) from the
-   index. A chunk is a complete thought if it starts where a sentence starts
-   in its document and ends on sentence-final punctuation or at the end of
-   its document. Also checked: no chunk from a split document under 178
-   characters, and at least two documents split. All three parts must hold.
-5. Laundry question hedges. The laundry answer passes if it names at least
-   two halls or asks which hall is meant. 1 of 1 per run.
+   corpus filename, with or without ".txt". A refusal names no source, so an
+   in-scope question that gets refused fails, whether the gate or the model
+   refused it.
 
-A criterion is MET only if its target holds in all three runs.
+3. The gate refuses out-of-corpus questions. This is read straight from the
+   gate table in the file. It is one deterministic pass, so it is the same
+   number in every column.
+
+4. Chunk quality. For run N, a random sample of 5 chunks from the index,
+   seeded with N. A chunk counts as a complete thought if it starts where a
+   sentence starts in its document and ends on a period, question mark, or
+   exclamation point, or at the end of its document. Two more checks run on
+   the whole index. No chunk from a split document can be under 178
+   characters, and at least two documents have to split. All three parts
+   have to hold.
+
+5. The laundry answer does not pick one hall. It passes if it names at
+   least two halls or asks which hall is meant. That is 1 of 1 per run.
+
+A criterion only counts as MET if the target holds in all three runs.
 """
 
 import random
@@ -43,7 +52,7 @@ import questions as qs  # noqa: E402
 from ingest import load_documents  # noqa: E402
 from scorer import VARIES, contains_expected, halls_named  # noqa: E402
 
-FLOOR = 178          # criteria.md, criterion 4 — the target as written
+FLOOR = 178          # criterion 4 in criteria.md, the target as I wrote it
 LAUNDRY = "Is laundry free in the dorms?"
 
 
@@ -55,6 +64,9 @@ def parse(path: Path):
 
     gate = re.findall(r"^\| (.+?) \| ([\d.]+) \| (refused|\*\*let through\*\*) \|$", text, re.M)
 
+    # The em dash below is run_eval.py's heading format, so it has to match
+    # exactly. Every field is kept to one line on purpose. An earlier version
+    # let ".*" run across lines and only ever read run 1.
     runs = {}
     for m in re.finditer(
         r"^### ([^\n]+?) — run (\d+)\n\n- Best distance: [^\n]*\n- Sources retrieved: [^\n]*\n\n```\n(.*?)\n```",
@@ -100,7 +112,7 @@ def main(path: Path):
     items = qs.answered()
     n_runs = sorted(runs)
 
-    # 1 — deterministic retrieval
+    # Criterion 1. Retrieval is deterministic, so this is one check.
     c1_detail = []
     for item in items:
         results = search(item["question"], top_k=top_k, corpus=corpus, variant=variant)
@@ -110,7 +122,7 @@ def main(path: Path):
                 if "laundry" in r.text.lower():
                     halls |= halls_named(r.source.replace("_", " "))
             hit = len(halls) >= 2
-            why = f"laundry chunks from {len(halls)} hall(s): {', '.join(sorted(halls)) or '-'}"
+            why = f"laundry chunks from {len(halls)} hall(s): {', '.join(sorted(halls)) or 'none'}"
         else:
             found = [r.label for r in results if contains_expected(item["expects"], r.text)]
             hit = bool(found)
@@ -118,7 +130,7 @@ def main(path: Path):
         c1_detail.append((item["question"], hit, why))
     c1 = sum(hit for _, hit, _ in c1_detail)
 
-    # 2, 5 — from the answers actually produced
+    # Criteria 2 and 5 come from the answers that actually came back.
     c2 = {}
     c2_detail = {}
     c5 = {}
@@ -128,10 +140,10 @@ def main(path: Path):
         c2_detail[n] = misses
         c5[n] = int(contains_expected(VARIES, runs[n].get(LAUNDRY, "")))
 
-    # 3 — deterministic gate
+    # Criterion 3. The gate is one deterministic pass.
     c3 = sum(verdict == "refused" for _, _, verdict in gate)
 
-    # 4 — chunk sample per run, plus the two whole-index checks
+    # Criterion 4. A new sample each run, plus the two whole-index checks.
     chunks = index_chunks(corpus, variant)
     split_sources = {c["source"] for c in chunks if c["index"] > 0}
     short = [c["id"] for c in chunks if c["source"] in split_sources and len(c["text"]) < FLOOR]
@@ -158,17 +170,17 @@ def main(path: Path):
               [f"{c2[n]}/5" for n in n_runs], all(c2[n] == 5 for n in n_runs)))
     print(row("3. Gate refuses out-of-corpus questions", "4 of 5",
               [f"{c3}/{len(gate)}"] * len(n_runs), c3 >= 4))
-    print(row("4. Sampled chunks are complete thoughts (+ floor, + 2 splits)",
+    print(row("4. Sampled chunks are complete thoughts, plus floor and 2 splits",
               "4 of 5, all parts",
-              [f"{c4[n]}/5{'' if c4_ok[n] else ' ✗'}" for n in n_runs],
+              [f"{c4[n]}/5{'' if c4_ok[n] else ' (fails a part)'}" for n in n_runs],
               all(c4_ok.values())))
-    print(row("5. Laundry answer doesn't silently pick one hall", "1 of 1",
+    print(row("5. Laundry answer does not silently pick one hall", "1 of 1",
               [f"{c5[n]}/1" for n in n_runs], all(c5.values())))
 
     print("\nDetail")
-    print("\n1. Retrieved chunks (same every run):")
+    print("\n1. Retrieved chunks, same every run:")
     for q, hit, why in c1_detail:
-        print(f"   {'✓' if hit else '✗'} {q} — {why}")
+        print(f"   {'pass' if hit else 'FAIL'}  {q}  {why}")
     print("\n2. Answers with no source named:")
     for n in n_runs:
         print(f"   run {n}: {', '.join(c2_detail[n]) or 'none'}")
@@ -180,11 +192,11 @@ def main(path: Path):
     print(f"   split-produced chunks under {FLOOR}: {', '.join(short) or 'none'}")
     for n in n_runs:
         sample, bad = c4_detail[n]
-        print(f"   run {n}: {', '.join(sample)}; cut at an edge: {', '.join(bad) or 'none'}")
-    print("\n5. Laundry answer halls named:")
+        print(f"   run {n}: {', '.join(sample)}. Cut at an edge: {', '.join(bad) or 'none'}")
+    print("\n5. Laundry answer, halls named:")
     for n in n_runs:
         named = halls_named(runs[n].get(LAUNDRY, ""))
-        print(f"   run {n}: {', '.join(sorted(named)) or 'none'}")
+        print(f"   run {n}: {len(named)} of 7. {', '.join(sorted(named)) or 'none'}")
 
 
 if __name__ == "__main__":
